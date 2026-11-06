@@ -346,7 +346,7 @@ class LlamaCppClient(LocalLLMClient):
             _LOGGER.debug(f"watching entities: {entity_ids}")
 
             async def _on_state_change(event: Event[EventStateChangedData]) -> None:
-                self._async_cache_prompt(event.data["entity_id"], event.data.get("old_state"), event.data.get("new_state"), entity_options)
+                await self._async_cache_prompt(event.data["entity_id"], event.data.get("old_state"), event.data.get("new_state"), entity_options)
 
             self.remove_prompt_caching_listener = async_track_state_change_event(self.hass, entity_ids, _on_state_change)
 

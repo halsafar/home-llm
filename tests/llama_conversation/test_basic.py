@@ -4,6 +4,8 @@ These avoid backend calls and only cover helper utilities to keep the suite gree
 while the integration evolves. No integration code is modified.
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
 import voluptuous as vol
 from openai import OpenAIError
@@ -308,6 +310,43 @@ async def test_llama_cpp_startup_validation_surfaces_install_error(monkeypatch, 
 
     with pytest.raises(ConfigEntryError, match="unexpected BufError"):
         await client.async_validate_startup()
+
+
+@pytest.mark.asyncio
+async def test_llama_cpp_prompt_caching_listener_follows_exposed_entity_changes(monkeypatch, hass):
+    client = LlamaCppClient(hass, {CONF_USE_IN_CONTEXT_LEARNING_EXAMPLES: False})
+    hass.states.async_set("light.lamp", "on")
+
+    monkeypatch.setattr(
+        "custom_components.llama_conversation.backends.llamacpp.async_should_expose",
+        lambda *_: True,
+    )
+    cache = AsyncMock()
+    monkeypatch.setattr(client, "_async_cache_prompt", cache)
+    options = {}
+
+    client._set_prompt_caching(options, enabled=True)
+    assert client.remove_prompt_caching_listener is not None
+
+    hass.states.async_set("light.lamp", "off")
+    await hass.async_block_till_done()
+
+    cache.assert_awaited_once()
+    entity_id, old_state, new_state, entity_options = cache.await_args.args
+    assert entity_id == "light.lamp"
+    assert old_state.state == "on"
+    assert new_state.state == "off"
+    assert entity_options is options
+
+    client._set_prompt_caching(options, enabled=False)
+    assert client.remove_prompt_caching_listener is None
+
+    hass.states.async_set("light.lamp", "on")
+    await hass.async_block_till_done()
+    cache.assert_awaited_once()
+
+    client._set_prompt_caching(options, enabled=True)
+    assert client.remove_prompt_caching_listener is not None
 
 
 @pytest.mark.asyncio
